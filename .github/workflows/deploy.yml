@@ -26,3 +26,7 @@ jobs:
       - name: ⚙️ Run bot remotely
         run: |
           ssh azureuser@4.230.11.18 "cd AutoBot && nohup python3 main.py > bot.log 2>&1 &"
+
+      - name: 🔧 Setup Python env
+        run: |
+          ssh azureuser@4.230.11.18 "cd AutoBot && pyenv local 3.11.8 && pip install -r requirements.txt"
