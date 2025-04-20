@@ -12,7 +12,7 @@ jobs:
       - name: ✅ Checkout repository
         uses: actions/checkout@v3
 
-      - name: ⚙️ Install TA‑Lib C library
+      - name: ⚙️ Install TA‑Lib C library on runner
         run: |
           sudo apt-get update
           sudo apt-get install -y libta-lib-dev build-essential
@@ -28,24 +28,21 @@ jobs:
         run: |
           rsync -avz --exclude '.git' ./ azureuser@4.230.11.18:/home/azureuser/AutoBot
 
-      - name: 📥 Install Python deps & restart bot
+      - name: 🚀 Install Python deps & restart bot on VM
         run: |
           ssh azureuser@4.230.11.18 << 'EOF'
             cd /home/azureuser/AutoBot
 
-            # if you don't already have a venv
+            # Create venv if it doesn't exist
             [ -d venv ] || python3 -m venv venv
-
             source venv/bin/activate
+
+            # Upgrade pip and install requirements (including TA‑Lib)
             pip install --upgrade pip
-
-            # TA‑Lib will now build cleanly against the system library
             pip install ta-lib
-
-            # install all the rest
             pip install -r requirements.txt
 
-            # restart
+            # Stop any existing bot and start a fresh one
             pkill -f main.py || true
             nohup venv/bin/python main.py > bot.log 2>&1 &
           EOF
