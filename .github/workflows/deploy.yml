@@ -23,6 +23,17 @@ jobs:
         run: |
           rsync -avz --exclude '.git' ./ azureuser@4.230.11.18:/home/azureuser/AutoBot
 
+      - name: 📝 Write .env on Azure VM
+        run: |
+          ssh azureuser@4.230.11.18 "
+            cat <<EOF > /home/azureuser/AutoBot/.env
+            BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }}
+            BINANCE_API_SECRET=${{ secrets.BINANCE_API_SECRET }}
+            TWITTER_BEARER_TOKEN=${{ secrets.TWITTER_BEARER_TOKEN }}
+            SLACK_WEBHOOK_URL=${{ secrets.SLACK_WEBHOOK_URL }}
+            EOF
+          "
+
       - name: 🚀 Install Python deps
         run: |
           ssh azureuser@4.230.11.18 "
