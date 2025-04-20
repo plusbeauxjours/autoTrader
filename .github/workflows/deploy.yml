@@ -12,37 +12,37 @@ jobs:
       - name: ✅ Checkout repository
         uses: actions/checkout@v3
 
-      - name: ⚙️ Install TA‑Lib C library on runner
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libta-lib-dev build-essential
-
       - name: 🔐 Set up SSH access
         run: |
-          mkdir -p $HOME/.ssh
-          echo "${{ secrets.VM_PRIVATE_KEY }}" > $HOME/.ssh/id_ed25519
-          chmod 600 $HOME/.ssh/id_ed25519
-          ssh-keyscan -H 4.230.11.18 >> $HOME/.ssh/known_hosts
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VM_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H 4.230.11.18 >> ~/.ssh/known_hosts
 
       - name: 📦 Sync code to Azure VM
         run: |
           rsync -avz --exclude '.git' ./ azureuser@4.230.11.18:/home/azureuser/AutoBot
 
-      - name: 🚀 Install Python deps & restart bot on VM
+      - name: 🚀 Install deps & Run bot on Azure VM
         run: |
           ssh azureuser@4.230.11.18 << 'EOF'
             cd /home/azureuser/AutoBot
-
-            # Create venv if it doesn't exist
-            [ -d venv ] || python3 -m venv venv
+            sudo apt-get update
+            sudo apt-get install -y build-essential wget curl
+            if [ ! -f "/usr/lib/libta_lib.so" ]; then
+              wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
+              tar -xvzf ta-lib-0.4.0-src.tar.gz
+              cd ta-lib
+              ./configure --prefix=/usr && make && sudo make install
+              cd .. && rm -rf ta-lib ta-lib-0.4.0-src.tar.gz
+            fi
+            python3 -m venv venv
             source venv/bin/activate
-
-            # Upgrade pip and install requirements (including TA‑Lib)
+            export LD_LIBRARY_PATH=/usr/lib
             pip install --upgrade pip
+            pip install numpy
             pip install ta-lib
             pip install -r requirements.txt
-
-            # Stop any existing bot and start a fresh one
             pkill -f main.py || true
             nohup venv/bin/python main.py > bot.log 2>&1 &
           EOF
