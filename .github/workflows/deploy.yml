@@ -74,3 +74,18 @@ jobs:
           ssh azureuser@4.230.11.18 "
             tail -n 20 /home/azureuser/AutoBot/bot.log || echo 'no bot.log found'
           "
+
+      - name: 📨 Send a test notification to Slack
+        run: |
+          echo ">>> Slack test 시작"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H 'Content-type: application/json' \
+            --data '{"text":"🚧 GitHub Actions에서 보내는 Slack 테스트 메시지"}' \
+            "${{ secrets.SLACK_WEBHOOK_URL }}")
+          echo "Slack webhook response status: $STATUS"
+          if [ "$STATUS" -ne 200 ]; then
+            echo "❌ Slack 전송에 실패했습니다."
+            exit 1
+          fi
+          echo "✅ Slack 테스트 메시지 전송 완료"

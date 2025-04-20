@@ -1,8 +1,10 @@
 import os
 import time
+import logging
 import requests
-from datetime import datetime, timedelta
 import atexit
+from datetime import datetime, timedelta
+from dotenv import load_dotenv
 
 from data_fetcher import get_symbols, get_klines
 from signal_generator import get_signal, cleanup_history
@@ -11,26 +13,22 @@ from trade_executor import TradeExecutor
 from logger import log_trade, daily_report
 from notifier import notify
 
-
-import logging, os, requests
-from dotenv import load_dotenv
-
-load_dotenv("/home/azureuser/AutoBot/.env")
+# 환경 변수 및 로깅 설정
+load_dotenv()
 logging.basicConfig(
-    filename="/home/azureuser/AutoBot/bot.log",
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s"
 )
 
-hook = os.getenv("SLACK_WEBHOOK_URL")
-logging.info(f"[DEBUG] SLACK_WEBHOOK_URL load 확인: {hook[:30]}...")
-
-try:
-    r = requests.post(hook, json={"text": "🚀 봇 시작 테스트 메시지"})
-    logging.info(f"[DEBUG] Slack 요청 응답: {r.status_code} {r.text}")
-except Exception:
-    logging.exception("[ERROR] Slack 전송 중 예외 발생")
-
+# Azure VM에서 실행될 때 로그 파일 설정
+log_path = "/home/azureuser/AutoBot/bot.log"
+if os.path.exists("/home/azureuser/AutoBot"):
+    logging.basicConfig(
+        filename=log_path,
+        level=logging.DEBUG,
+        format="%(asctime)s %(levelname)s %(message)s"
+    )
+    logging.info("로그 파일 설정 완료: %s", log_path)
 
 # 환경변수 설정
 SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
@@ -38,11 +36,27 @@ THRESHOLD = 3.0  # 가격 변동 감지 임계값 (%)
 INTERVAL = 60    # 모니터링 간격 (초)
 MAX_SYMBOLS = 500  # 최대 모니터링 심볼 수
 
-# 세션 재사용으로 성능 향상
+# 글로벌 변수
 session = requests.Session()
 last_prices = {}
+balance_cache = {'value': None, 'timestamp': None}
+balance_cache_duration = 300  # 5분
+last_cleanup_time = datetime.now()
+cleanup_interval = 3600  # 1시간마다 메모리 정리
 
-# 자원 정리 함수
+# 슬랙 연결 테스트
+def test_slack_connection():
+    """슬랙 연결 테스트"""
+    if SLACK_WEBHOOK_URL:
+        logging.info(f"SLACK_WEBHOOK_URL 확인: {SLACK_WEBHOOK_URL[:30]}...")
+        try:
+            r = requests.post(SLACK_WEBHOOK_URL, json={"text": "🚀 봇 시작 테스트 메시지"})
+            logging.info(f"Slack 요청 응답: {r.status_code} {r.text}")
+            return r.status_code == 200
+        except Exception as e:
+            logging.exception(f"Slack 전송 중 예외 발생: {e}")
+    return False
+
 def cleanup_resources():
     """프로그램 종료 시 리소스 정리"""
     if session:
@@ -51,14 +65,6 @@ def cleanup_resources():
 
 # 종료 시 리소스 정리 등록
 atexit.register(cleanup_resources)
-
-# 캐시 변수 추가
-balance_cache = {'value': None, 'timestamp': None}
-balance_cache_duration = 300  # 5분
-
-# 마지막 메모리 정리 시간
-last_cleanup_time = datetime.now()
-cleanup_interval = 3600  # 1시간마다 메모리 정리
 
 def get_cached_balance(exec):
     """잔고 정보를 캐시하여 불필요한 API 호출 방지"""
@@ -118,6 +124,7 @@ def notify_slack(message):
             session.post(SLACK_WEBHOOK_URL, json={"text": log}, timeout=5)
         except Exception as e:
             print(f"[{timestamp}] Slack failed: {e}")
+            logging.error(f"Slack 전송 실패: {e}")
 
 def fetch_all_prices():
     """모든 USDT 페어의 현재 가격 조회"""
@@ -135,6 +142,7 @@ def fetch_all_prices():
         return prices
     except Exception as e:
         notify_slack(f"❌ Price fetch error: {e}")
+        logging.error(f"가격 조회 오류: {e}")
         return {}
 
 def trade_logic(trigger_symbol):
@@ -205,6 +213,7 @@ def trade_logic(trigger_symbol):
         
     except Exception as e:
         notify_slack(f"❌ Trading error for {trigger_symbol}: {e}")
+        logging.error(f"거래 오류 ({trigger_symbol}): {e}")
 
 def monitor():
     """가격 모니터링 및 이상 징후 감지"""
@@ -261,12 +270,19 @@ def monitor():
 
 if __name__ == "__main__":
     notify_slack("🤖 AutoBot이 시작되었습니다!")
-
+    
+    # 슬랙 연결 테스트
+    slack_working = test_slack_connection()
+    if not slack_working:
+        logging.warning("⚠️ Slack 연결 테스트 실패, 로컬 로깅만 사용합니다.")
+    
     try:
         monitor()
     except KeyboardInterrupt:
         notify_slack("\n🛑 Bot stopped by user")
         cleanup_resources()
     except Exception as e:
-        notify_slack(f"❌ Critical error: {e}")
+        error_msg = f"❌ Critical error: {e}"
+        notify_slack(error_msg)
+        logging.exception(error_msg)
         cleanup_resources()
