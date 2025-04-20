@@ -19,6 +19,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s"
 )
+print("→ SLACK_WEBHOOK_URL=", os.getenv("SLACK_WEBHOOK_URL"))
 
 # Azure VM에서 실행될 때 로그 파일 설정
 log_path = "/home/azureuser/AutoBot/bot.log"
