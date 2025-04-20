@@ -14,10 +14,10 @@ jobs:
 
       - name: 🔐 Set up SSH access
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.VM_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H 4.230.11.18 >> ~/.ssh/known_hosts
+          mkdir -p $HOME/.ssh
+          echo "${{ secrets.VM_PRIVATE_KEY }}" > $HOME/.ssh/id_ed25519
+          chmod 600 $HOME/.ssh/id_ed25519
+          ssh-keyscan -H 4.230.11.18 >> $HOME/.ssh/known_hosts
 
       - name: 📦 Sync code to Azure VM
         run: |
