@@ -12,43 +12,43 @@ jobs:
       - name: ✅ Checkout repository
         uses: actions/checkout@v3
 
-      - name: ⚙️ Install TA-Lib dependencies
+      - name: ⚙️ Install TA‑Lib C library
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential wget curl
-          wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
-          tar -xvzf ta-lib-0.4.0-src.tar.gz
-          cd ta-lib
-          ./configure --prefix=/usr
-          make
-          sudo make install
-          cd ..
-          rm -rf ta-lib ta-lib-0.4.0-src.tar.gz
+          sudo apt-get install -y libta-lib-dev build-essential
 
       - name: 🔐 Set up SSH access
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.VM_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H 4.230.11.18 >> ~/.ssh/known_hosts
+          mkdir -p $HOME/.ssh
+          echo "${{ secrets.VM_PRIVATE_KEY }}" > $HOME/.ssh/id_ed25519
+          chmod 600 $HOME/.ssh/id_ed25519
+          ssh-keyscan -H 4.230.11.18 >> $HOME/.ssh/known_hosts
 
       - name: 📦 Sync code to Azure VM
         run: |
           rsync -avz --exclude '.git' ./ azureuser@4.230.11.18:/home/azureuser/AutoBot
 
-      - name: 🚀 Install Python deps & Run bot
+      - name: 📥 Install Python deps & restart bot
         run: |
-          ssh azureuser@4.230.11.18 "
-            cd /home/azureuser/AutoBot &&
-            python3 -m venv venv &&
-            source venv/bin/activate &&
-            pip install --upgrade pip &&
-            pip install numpy &&
-            pip install TA-Lib &&
-            pip install -r requirements.txt &&
-            pkill -f main.py || true &&
+          ssh azureuser@4.230.11.18 << 'EOF'
+            cd /home/azureuser/AutoBot
+
+            # if you don't already have a venv
+            [ -d venv ] || python3 -m venv venv
+
+            source venv/bin/activate
+            pip install --upgrade pip
+
+            # TA‑Lib will now build cleanly against the system library
+            pip install ta-lib
+
+            # install all the rest
+            pip install -r requirements.txt
+
+            # restart
+            pkill -f main.py || true
             nohup venv/bin/python main.py > bot.log 2>&1 &
-          "
+          EOF
 
       - name: 🎉 Done!
         run: echo "✅ Bot deployed and running on Azure VM 🐍"
