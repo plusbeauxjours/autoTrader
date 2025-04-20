@@ -1,7 +1,7 @@
 import os
 import time
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from data_fetcher import get_symbols, get_klines
 from signal_generator import get_signal
@@ -18,6 +18,20 @@ INTERVAL = 60    # 모니터링 간격 (초)
 # 세션 재사용으로 성능 향상
 session = requests.Session()
 last_prices = {}
+
+# 캐시 변수 추가
+balance_cache = {'value': None, 'timestamp': None}
+balance_cache_duration = 300  # 5분
+
+def get_cached_balance(exec):
+    """잔고 정보를 캐시하여 불필요한 API 호출 방지"""
+    now = datetime.now()
+    if (balance_cache['value'] is None or 
+        balance_cache['timestamp'] is None or 
+        (now - balance_cache['timestamp']).total_seconds() > balance_cache_duration):
+        balance_cache['value'] = float(exec.cli.futures_account_balance()[6]['balance'])
+        balance_cache['timestamp'] = now
+    return balance_cache['value']
 
 def notify_slack(message):
     """슬랙으로 메시지 전송"""
@@ -77,7 +91,7 @@ def trade_logic(trigger_symbol):
         
         # 트레이드 실행기 초기화
         exec = TradeExecutor()
-        balance = float(exec.cli.futures_account_balance()[6]['balance'])
+        balance = get_cached_balance(exec)
         notify_slack(f"💰 Current balance: {balance:.2f} USDT")
         
         # 가격 데이터 조회
