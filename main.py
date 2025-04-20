@@ -28,62 +28,85 @@ def notify_slack(message):
             print(f"[{timestamp}] Slack failed: {e}")
 
 def fetch_all_prices():
+    print("\n🔍 Fetching all prices...")
     url = 'https://fapi.binance.com/fapi/v1/ticker/price'
     try:
         res = session.get(url, timeout=5)
         res.raise_for_status()
-        return {
+        prices = {
             item['symbol']: float(item['price'])
             for item in res.json()
             if item['symbol'].endswith('USDT')
         }
+        print(f"✅ Successfully fetched prices for {len(prices)} pairs")
+        return prices
     except Exception as e:
         notify_slack(f"❌ Price fetch error: {e}")
         return {}
 
 def trade_logic():
+    print("\n🔄 Starting trade logic...")
     syms = get_symbols()
     risk = RiskManager()
     exec = TradeExecutor()
     balance = float(exec.cli.futures_account_balance()[6]['balance'])
+    print(f"💰 Current balance: {balance:.2f} USDT")
 
     for sym in syms:
         if not risk.can_trade(sym):
+            print(f"⏭️ Skipping {sym} - trading not allowed")
             continue
-        print(f"📡 Checking signal for: {sym}")
+            
+        print(f"\n📡 Checking signal for: {sym}")
         try:
             sig = get_signal(sym)
+            print(f"📊 Signal for {sym}: {sig}")
         except Exception as e:
             print(f"❌ Signal error for {sym}: {e}")
             time.sleep(1)
             continue
 
         if sig in ('buy', 'sell'):
+            notify_slack(f"🎯 Trade signal detected for {sym}: {sig}")
             df = get_klines(sym)
             entry = df['close'].iloc[-1]
             stop = df['close'][:-1].min() if sig == 'buy' else df['close'][:-1].max()
+            notify_slack(f"📈 Entry price: {entry:.2f}, Stop price: {stop:.2f}")
+            
             qty, lev = risk.size_leverage(balance, entry, stop)
+            notify_slack(f"📊 Position size: {qty:.3f}, Leverage: {lev}x")
+            
             exec.set_leverage(sym, lev)
+            notify_slack(f"⚙️ Set leverage for {sym} to {lev}x")
+            
             exec.enter_limit(sym, 'BUY' if sig == 'buy' else 'SELL', qty, entry)
+            notify_slack(f"✅ Entered {sig} order for {sym} at {entry:.2f}")
+            
             tp = entry * 1.10 if sig == 'buy' else entry * 0.90
             exec.place_oco(sym, 'SELL' if sig == 'buy' else 'BUY', qty, stop, tp)
+            notify_slack(f"✅ Placed OCO order - TP: {tp:.2f}, SL: {stop:.2f}")
+            
             pnl = (tp - entry) / entry * qty
             risk.register(pnl, sym)
+            notify_slack(f"📊 Expected PnL: {pnl:.2f} USDT")
+            
             log_trade({'symbol': sym, 'side': sig, 'entry': entry, 'exit': tp, 'pnl': pnl})
             notify(f"{sym} {sig}@{entry:.2f}, qty={qty:.3f}, lev={lev}x")
+            notify_slack(f"📝 Trade logged and notification sent")
 
         time.sleep(1)
 
 def monitor():
     global last_prices
     notify_slack("🚀 Binance anomaly monitor + trader started.")
+    
     last_prices = fetch_all_prices()
     if not last_prices:
         notify_slack("❌ Initial fetch failed. Exit.")
         return
 
     while True:
-        print("🔁 Monitoring prices...")
+        print("\n🔁 Monitoring prices...")
         time.sleep(INTERVAL)
         current_prices = fetch_all_prices()
         if not current_prices:
