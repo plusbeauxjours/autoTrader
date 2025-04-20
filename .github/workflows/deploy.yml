@@ -104,27 +104,3 @@ jobs:
 
       - name: 🎉 Done!
         run: echo "🎯 Bot deployed and running live on Azure VM! 🚀"
-
-      - name: 📨 Test Slack from VM in venv
-        run: |
-          ssh azureuser@4.230.11.18 <<'EOF'
-            cd /home/azureuser/AutoBot
-            source venv/bin/activate
-
-            # 이 짧은 스크립트가 실제로 Slack에 메시지를 보내는지 확인합니다.
-            python3 - <<'PYCODE'
-            import os, requests
-            from dotenv import load_dotenv
-
-            # .env 파일에서 값 읽기
-            load_dotenv('.env')
-            url = os.getenv('SLACK_WEBHOOK_URL')
-            print(f"→ Loaded SLACK_WEBHOOK_URL: {url[:30]}...")
-
-            if not url:
-                raise RuntimeError("SLACK_WEBHOOK_URL이 로드되지 않았습니다!")
-
-            r = requests.post(url, json={'text':'📣 CI pipeline에서 보내는 Slack 테스트 메시지'})
-            print("HTTP status:", r.status_code, r.text)
-            PYCODE
-                      EOF
