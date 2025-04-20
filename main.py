@@ -13,26 +13,64 @@ from trade_executor import TradeExecutor
 from logger import log_trade, daily_report
 from notifier import notify
 
-# 환경 변수 및 로깅 설정
-load_dotenv()
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s"
-)
-print("→ SLACK_WEBHOOK_URL=", os.getenv("SLACK_WEBHOOK_URL"))
+# 환경 변수 설정
+def setup_environment():
+    """환경 변수 설정 및 로깅 초기화"""
+    # Azure VM에서 실행 중인지 확인
+    azure_env_path = "/home/azureuser/AutoBot/.env"
+    local_env_path = ".env"
+    
+    # 먼저 로컬 환경 변수 시도
+    load_dotenv(local_env_path)
+    
+    # Azure VM 환경 확인 및 설정
+    is_azure_vm = os.path.exists("/home/azureuser/AutoBot")
+    if is_azure_vm and os.path.exists(azure_env_path):
+        load_dotenv(azure_env_path, override=True)
+        
+    # 로깅 설정
+    log_handlers = []
+    log_format = "%(asctime)s %(levelname)s %(message)s"
+    
+    # 콘솔 핸들러 추가
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter(log_format))
+    log_handlers.append(console_handler)
+    
+    # Azure VM에서는 파일 로깅 추가
+    if is_azure_vm:
+        log_path = "/home/azureuser/AutoBot/bot.log"
+        file_handler = logging.FileHandler(log_path)
+        file_handler.setFormatter(logging.Formatter(log_format))
+        log_handlers.append(file_handler)
+    
+    # 루트 로거 설정
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    
+    # 기존 핸들러 제거 및 새 핸들러 추가
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    for handler in log_handlers:
+        root_logger.addHandler(handler)
+    
+    # 환경 정보 로깅
+    webhook_url = os.getenv("SLACK_WEBHOOK_URL")
+    if webhook_url:
+        masked_url = webhook_url[:15] + "..." + webhook_url[-10:] if len(webhook_url) > 30 else webhook_url
+        logging.info(f"SLACK_WEBHOOK_URL 설정됨: {masked_url}")
+    else:
+        logging.warning("SLACK_WEBHOOK_URL이 설정되지 않았습니다!")
+    
+    return {
+        "SLACK_WEBHOOK_URL": webhook_url,
+        "IS_AZURE_VM": is_azure_vm
+    }
 
-# Azure VM에서 실행될 때 로그 파일 설정
-log_path = "/home/azureuser/AutoBot/bot.log"
-if os.path.exists("/home/azureuser/AutoBot"):
-    logging.basicConfig(
-        filename=log_path,
-        level=logging.DEBUG,
-        format="%(asctime)s %(levelname)s %(message)s"
-    )
-    logging.info("로그 파일 설정 완료: %s", log_path)
-
-# 환경변수 설정
-SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
+# 환경 설정 및 변수 초기화
+env_config = setup_environment()
+SLACK_WEBHOOK_URL = env_config["SLACK_WEBHOOK_URL"]
+IS_AZURE_VM = env_config["IS_AZURE_VM"]
 THRESHOLD = 3.0  # 가격 변동 감지 임계값 (%)
 INTERVAL = 60    # 모니터링 간격 (초)
 MAX_SYMBOLS = 500  # 최대 모니터링 심볼 수
@@ -48,21 +86,30 @@ cleanup_interval = 3600  # 1시간마다 메모리 정리
 # 슬랙 연결 테스트
 def test_slack_connection():
     """슬랙 연결 테스트"""
-    if SLACK_WEBHOOK_URL:
-        logging.info(f"SLACK_WEBHOOK_URL 확인: {SLACK_WEBHOOK_URL[:30]}...")
-        try:
-            r = requests.post(SLACK_WEBHOOK_URL, json={"text": "🚀 봇 시작 테스트 메시지"})
-            logging.info(f"Slack 요청 응답: {r.status_code} {r.text}")
-            return r.status_code == 200
-        except Exception as e:
-            logging.exception(f"Slack 전송 중 예외 발생: {e}")
-    return False
+    if not SLACK_WEBHOOK_URL:
+        logging.error("Slack 연결 테스트 실패: Webhook URL이 설정되지 않았습니다.")
+        return False
+        
+    try:
+        r = requests.post(SLACK_WEBHOOK_URL, json={"text": "🚀 AutoBot 시작 테스트 메시지"}, timeout=10)
+        status = r.status_code
+        logging.info(f"Slack 테스트 요청 응답: {status} {r.text}")
+        if status != 200:
+            logging.error(f"Slack 연결 테스트 실패: HTTP 상태 코드 {status}")
+            return False
+        return True
+    except Exception as e:
+        logging.exception(f"Slack 연결 테스트 중 오류 발생: {e}")
+        return False
 
 def cleanup_resources():
     """프로그램 종료 시 리소스 정리"""
     if session:
         session.close()
-    notify_slack("🛑 Bot shutting down, cleaning up resources")
+    try:
+        notify_slack("🛑 Bot shutting down, cleaning up resources")
+    except Exception as e:
+        logging.error(f"종료 알림 전송 중 오류: {e}")
 
 # 종료 시 리소스 정리 등록
 atexit.register(cleanup_resources)
@@ -73,8 +120,13 @@ def get_cached_balance(exec):
     if (balance_cache['value'] is None or 
         balance_cache['timestamp'] is None or 
         (now - balance_cache['timestamp']).total_seconds() > balance_cache_duration):
-        balance_cache['value'] = float(exec.cli.futures_account_balance()[6]['balance'])
-        balance_cache['timestamp'] = now
+        try:
+            balance_cache['value'] = float(exec.cli.futures_account_balance()[6]['balance'])
+            balance_cache['timestamp'] = now
+        except Exception as e:
+            logging.error(f"잔고 정보 조회 중 오류: {e}")
+            if balance_cache['value'] is None:
+                balance_cache['value'] = 0.0
     return balance_cache['value']
 
 def perform_periodic_cleanup():
@@ -120,12 +172,17 @@ def notify_slack(message):
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     log = f"[{timestamp}] {message}"
     print(log)
-    if SLACK_WEBHOOK_URL:
-        try:
-            session.post(SLACK_WEBHOOK_URL, json={"text": log}, timeout=5)
-        except Exception as e:
-            print(f"[{timestamp}] Slack failed: {e}")
-            logging.error(f"Slack 전송 실패: {e}")
+    
+    if not SLACK_WEBHOOK_URL:
+        logging.warning("Slack 메시지 전송 실패: Webhook URL이 설정되지 않았습니다.")
+        return
+        
+    try:
+        response = session.post(SLACK_WEBHOOK_URL, json={"text": log}, timeout=10)
+        if response.status_code != 200:
+            logging.error(f"Slack 전송 실패: 상태 코드 {response.status_code}, 응답: {response.text}")
+    except Exception as e:
+        logging.error(f"Slack 알림 전송 중 오류: {e}")
 
 def fetch_all_prices():
     """모든 USDT 페어의 현재 가격 조회"""
