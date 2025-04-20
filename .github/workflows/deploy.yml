@@ -51,3 +51,9 @@ jobs:
 
       - name: 🎉 Done!
         run: echo "🎯 Bot deployed and running live on Azure VM! 🚀"
+
+      - name: ✅ Check Bot is Running
+        run: |
+          ssh azureuser@4.230.11.18 "
+            pgrep -f main.py || (echo '❌ Bot not running' && exit 1)
+          "
