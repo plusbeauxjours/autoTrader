@@ -10,8 +10,11 @@ client = Client(os.getenv('BINANCE_API_KEY'), os.getenv('BINANCE_API_SECRET'))
 twitter_client = tweepy.Client(bearer_token=os.getenv('TWITTER_BEARER_TOKEN'))
 
 def get_symbols():
-    info = client.futures_exchange_info()
-    return [s['symbol'] for s in info['symbols'] if s['quoteAsset']=='USDT']
+    print("📥 Fetching tradable symbols...")
+    exchange_info = client.futures_exchange_info()
+    symbols = [s['symbol'] for s in exchange_info['symbols'] if s['status'] == 'TRADING']
+    print(f"✅ {len(symbols)} tradable symbols fetched")
+    return symbols
 
 def get_klines(symbol, interval='1m', limit=6):
     cols = ['open_time','open','high','low','close','volume','close_time',
