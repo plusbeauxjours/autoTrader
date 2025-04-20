@@ -1,135 +1,127 @@
-# Binance Futures Auto-Trading Bot
+# AutoBot - Automated Cryptocurrency Trading Bot
 
-📈 A fully automated Binance Futures trading bot powered by:
+An automated trading bot that combines technical analysis and sentiment analysis to identify and execute trading opportunities in cryptocurrency futures markets.
 
-- **Volume spike anomaly detection**
-- **Technical indicators**: RSI, MACD, Bollinger Bands
-- **Twitter sentiment analysis** using VADER
-- **Dynamic risk management** with trailing stop, isolated margin & leverage control
-- **Slack alerts** for real-time updates
-- **Daily performance reports** (PnL, win rate, trade count)
+## Features
 
----
+- **Real-time Market Monitoring**: Continuously monitors price movements and volume spikes
+- **Technical Analysis**: Uses RSI, Bollinger Bands, and MACD indicators
+- **Sentiment Analysis**: Analyzes Twitter sentiment for additional trading signals
+- **Risk Management**: Implements position sizing and leverage management
+- **Automated Trading**: Executes trades with take-profit and stop-loss orders
+- **Notifications**: Sends alerts via Slack for trades and anomalies
 
-## 🔧 Features
+## Components
 
-### 📊 Market Signal Detection
+### Data Fetcher (`data_fetcher.py`)
 
-- Monitors USDT futures pairs for sudden volume increases (3× 5min avg)
-- Calculates technical signals (RSI, MACD crossover, Bollinger Band touches)
-- Pulls latest tweets related to the coin and analyzes sentiment
-- Combines signals into a composite score:
-  - `score >= 0.5` → Buy
-  - `score <= -0.5` → Sell
-  - Confirmed over 3 consecutive minutes before executing
+- Fetches historical price data from Binance
+- Retrieves recent tweets for sentiment analysis
+- Handles API rate limiting and error handling
 
-### 🛡 Risk Management
+### Signal Generator (`signal_generator.py`)
 
-- Trades only **max 5 per day**
-- Stops if **3 consecutive losses**
-- Applies **cooldown of 30 mins** per symbol after trade
-- Max **2% of balance** risked per trade
-- Leverage adjusts based on stop-loss distance:
-  - ≤1% → 10×
-  - ≤2% → 5×
-  - > 2% → 2×
+- Combines technical and sentiment analysis
+- Detects volume spikes
+- Generates trading signals based on multiple indicators
 
-### 💰 Trade Execution
+### Risk Manager (`risk_manager.py`)
 
-- Uses **isolated margin mode**
-- Enters with **limit orders**; cancels if slippage >1%
-- Automatically sets **stop-loss (5%)** and **take-profit (10%)**
-- Implements **trailing stop logic** (follows 50% of gain)
+- Manages position sizing based on account balance
+- Adjusts leverage based on volatility
+- Tracks trade history and performance
 
-### 📢 Notifications
+### Trade Executor (`trade_executor.py`)
 
-- Sends trade entries, exits, and daily reports to **Slack**
+- Executes trades on Binance Futures
+- Places OCO (One-Cancels-Other) orders for take-profit and stop-loss
+- Manages leverage settings
 
-### 📄 Reporting
+### Logger (`logger.py`)
 
-- Logs all trades to `trade_log.csv`
-- Generates a summary every day with:
-  - Total PnL
-  - Win/Loss count
-  - Win rate
-  - Average PnL
+- Logs trade entries and exits
+- Generates daily performance reports
+- Tracks trading metrics
 
----
+### Notifier (`notifier.py`)
 
-## 🚀 Getting Started
+- Sends notifications via Slack
+- Alerts on trades and anomalies
+- Provides real-time updates
 
-### 1. Clone & Install
+## Setup
+
+1. Clone the repository:
 
 ```bash
-git clone https://github.com/yourusername/auto-bot.git
-cd auto-bot
+git clone https://github.com/plusbeauxjours/autoTrader.git
+cd autobot
+```
+
+2. Install dependencies:
+
+```bash
 pip install -r requirements.txt
 ```
 
-### 2. Setup `.env`
+3. Set up environment variables:
 
-Rename `.env.example` → `.env` and fill in:
+Edit `.env` with your credentials:
 
-```env
-BINANCE_API_KEY=your_key
-BINANCE_API_SECRET=your_secret
-TWITTER_BEARER_TOKEN=your_token
-SLACK_WEBHOOK_URL=https://hooks.slack.com/...
+```
+BINANCE_API_KEY=
+BINANCE_API_SECRET=
+TWITTER_BEARER_TOKEN
+SLACK_WEBHOOK_URL=
 ```
 
-### 3. Run
+4. Run the bot:
 
 ```bash
 python main.py
 ```
 
-### 4. Testing
+## Trading Strategy
 
-The project includes comprehensive unit tests for all major components. To run the tests:
+The bot uses a combination of technical and sentiment analysis to identify trading opportunities:
 
-```bash
-pytest tests/
-```
+1. **Volume Spike Detection**: Identifies unusual trading activity
+2. **Technical Indicators**:
+   - RSI (Relative Strength Index)
+   - Bollinger Bands
+   - MACD (Moving Average Convergence Divergence)
+3. **Sentiment Analysis**: Analyzes Twitter sentiment for additional confirmation
+4. **Signal Generation**: Combines indicators into a single score
+5. **Trade Execution**: Enters positions with OCO orders for risk management
 
-Test coverage includes:
+## Risk Management
 
-- Data fetching and processing
-- Signal generation and analysis
-- Risk management
-- Trade execution
-- Main monitoring logic
+- Position sizing based on account balance
+- Dynamic leverage adjustment
+- Stop-loss and take-profit orders
+- Trade history tracking
+- Daily performance monitoring
 
-Each test file (`test_*.py`) corresponds to a module in the project and includes:
+## Requirements
 
-- Unit tests for individual functions
-- Mock implementations for external APIs
-- Error handling scenarios
-- Edge cases
+- Python 3.8+
+- Binance API credentials
+- Slack webhook URL (optional)
+- Twitter API credentials (optional)
 
----
+## Dependencies
 
-## 🧠 Architecture
+- python-binance
+- pandas
+- numpy
+- scikit-learn
+- requests
+- python-dotenv
 
-```
-main.py
-├── data_fetcher.py           # Binance + Twitter data
-├── technical_analysis.py     # RSI, MACD, BBANDS
-├── sentiment_analysis.py     # VADER sentiment scoring
-├── signal_generator.py       # Strategy logic
-├── risk_manager.py           # Position sizing, limits
-├── trade_executor.py         # Binance order functions
-├── logger.py                 # Trade logs & daily report
-└── notifier.py               # Slack alerts
-```
+## License
 
----
+MIT License
 
-## ⚠️ Disclaimer
+## Disclaimer
 
-> This is a research/educational project. Use at your own risk. Trading futures involves significant financial risk and can lead to substantial losses. Be sure to test thoroughly before live deployment.
-
----
-
-## 📬 Contributions
-
-Feel free to open issues, suggest improvements, or fork for your own strategies!
+This bot is for educational purposes only. Use at your own risk. Cryptocurrency trading involves significant risk of loss.
