@@ -11,6 +11,27 @@ from trade_executor import TradeExecutor
 from logger import log_trade, daily_report
 from notifier import notify
 
+
+import logging, os, requests
+from dotenv import load_dotenv
+
+load_dotenv("/home/azureuser/AutoBot/.env")
+logging.basicConfig(
+    filename="/home/azureuser/AutoBot/bot.log",
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)s %(message)s"
+)
+
+hook = os.getenv("SLACK_WEBHOOK_URL")
+logging.info(f"[DEBUG] SLACK_WEBHOOK_URL load 확인: {hook[:30]}...")
+
+try:
+    r = requests.post(hook, json={"text": "🚀 봇 시작 테스트 메시지"})
+    logging.info(f"[DEBUG] Slack 요청 응답: {r.status_code} {r.text}")
+except Exception:
+    logging.exception("[ERROR] Slack 전송 중 예외 발생")
+
+
 # 환경변수 설정
 SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
 THRESHOLD = 3.0  # 가격 변동 감지 임계값 (%)

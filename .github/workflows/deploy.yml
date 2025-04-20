@@ -68,3 +68,9 @@ jobs:
 
       - name: 🎉 Done!
         run: echo "🎯 Bot deployed and running live on Azure VM! 🚀"
+
+      - name: 🐛 Dump bot.log
+        run: |
+          ssh azureuser@4.230.11.18 "
+            tail -n 20 /home/azureuser/AutoBot/bot.log || echo 'no bot.log found'
+          "
