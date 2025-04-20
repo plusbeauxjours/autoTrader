@@ -23,15 +23,17 @@ jobs:
         run: |
           rsync -avz --exclude '.git' ./ azureuser@4.230.11.18:/home/azureuser/AutoBot
 
-      - name: 📦 Install Python deps & restart bot
+      - name: ⚙️ Install dependencies & restart bot
         run: |
           ssh azureuser@4.230.11.18 "
             cd /home/azureuser/AutoBot &&
-            pyenv local 3.11.8 &&
+            [ -d venv ] || python3 -m venv venv &&
+            source venv/bin/activate &&
+            pip install --upgrade pip &&
             pip install -r requirements.txt &&
             pkill -f main.py || true &&
-            nohup python3 main.py > bot.log 2>&1 &
+            nohup python main.py > bot.log 2>&1 &
           "
 
       - name: 🎉 Done!
-        run: echo "🚀 Bot deployed and running on Azure VM 🐍"
+        run: echo '✅ Bot deployed and running on Azure VM!'
