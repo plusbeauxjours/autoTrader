@@ -239,10 +239,12 @@ def monitor():
         last_prices = current_prices
 
 if __name__ == "__main__":
+    notify_slack("🤖 AutoBot이 시작되었습니다!")
+
     try:
         monitor()
     except KeyboardInterrupt:
-        print("\n🛑 Bot stopped by user")
+        notify_slack("\n🛑 Bot stopped by user")
         cleanup_resources()
     except Exception as e:
         notify_slack(f"❌ Critical error: {e}")

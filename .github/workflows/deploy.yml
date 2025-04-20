@@ -25,16 +25,16 @@ jobs:
 
       - name: 📝 Write .env on Azure VM
         run: |
-          ssh azureuser@4.230.11.18 "
-            cat <<EOF > /home/azureuser/AutoBot/.env
+          ssh azureuser@4.230.11.18 << EOF
+            cat > /home/azureuser/AutoBot/.env << EOT
             BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }}
             BINANCE_API_SECRET=${{ secrets.BINANCE_API_SECRET }}
             TWITTER_BEARER_TOKEN=${{ secrets.TWITTER_BEARER_TOKEN }}
             SLACK_WEBHOOK_URL=${{ secrets.SLACK_WEBHOOK_URL }}
-            EOF
-          "
+            EOT
+          EOF
 
-      - name: 🚀 Install Python deps
+      - name: 📦 Set up Python and install dependencies
         run: |
           ssh azureuser@4.230.11.18 "
             cd /home/azureuser/AutoBot &&
@@ -44,7 +44,7 @@ jobs:
             pip install -r requirements.txt
           "
 
-      - name: ✅ Verify installation
+      - name: ✅ Verify TA-Lib (via `ta` package)
         run: |
           ssh azureuser@4.230.11.18 "
             source /home/azureuser/AutoBot/venv/bin/activate &&
@@ -60,11 +60,11 @@ jobs:
             nohup venv/bin/python main.py > bot.log 2>&1 &
           "
 
-      - name: 🎉 Done!
-        run: echo "🎯 Bot deployed and running live on Azure VM! 🚀"
-
-      - name: ✅ Check Bot is Running
+      - name: 🔍 Check if Bot is Running
         run: |
           ssh azureuser@4.230.11.18 "
             pgrep -f main.py || (echo '❌ Bot not running' && exit 1)
           "
+
+      - name: 🎉 Done!
+        run: echo "🎯 Bot deployed and running live on Azure VM! 🚀"
