@@ -31,7 +31,7 @@ jobs:
             BINANCE_API_SECRET=${{ secrets.BINANCE_API_SECRET }}
             TWITTER_BEARER_TOKEN=${{ secrets.TWITTER_BEARER_TOKEN }}
             SLACK_WEBHOOK_URL=${{ secrets.SLACK_WEBHOOK_URL }}
-            EOT
+          EOT
           EOF
 
       - name: 📦 Set up Python and install dependencies
@@ -57,7 +57,7 @@ jobs:
             pkill -f main.py || true &&
             cd /home/azureuser/AutoBot &&
             source venv/bin/activate &&
-            nohup venv/bin/python main.py > bot.log 2>&1 &
+            nohup venv/bin/python3 main.py > bot.log 2>&1 &
           "
 
       - name: 🔍 Check if Bot is Running
