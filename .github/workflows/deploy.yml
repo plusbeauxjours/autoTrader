@@ -77,31 +77,6 @@ jobs:
             python -c 'import ta; print(\"✅ Technical Analysis library installed successfully\")'
           "
 
-      - name: 🔄 Test Slack connection from VM
-        run: |
-          ssh azureuser@4.230.11.18 "
-            cd /home/azureuser/AutoBot &&
-            source venv/bin/activate &&
-            python -c \"
-            import os, requests
-            from dotenv import load_dotenv
-            load_dotenv()
-            webhook_url = os.getenv('SLACK_WEBHOOK_URL')
-            print(f'Webhook URL found: {webhook_url is not None}')
-            if webhook_url:
-                try:
-                    r = requests.post(webhook_url, json={'text':'🤖 VM에서 보내는 Slack 연결 테스트'}, timeout=10)
-                    print(f'Slack response: {r.status_code} {r.text}')
-                    exit(0 if r.status_code == 200 else 1)
-                except Exception as e:
-                    print(f'Error: {e}')
-                    exit(1)
-            else:
-                print('No webhook URL found!')
-                exit(1)
-            \"
-          "
-
       - name: 🔁 Restart Bot
         run: |
           ssh azureuser@4.230.11.18 "
@@ -129,3 +104,27 @@ jobs:
 
       - name: 🎉 Done!
         run: echo "🎯 Bot deployed and running live on Azure VM! 🚀"
+
+      - name: 📨 Test Slack from VM in venv
+        run: |
+          ssh azureuser@4.230.11.18 <<'EOF'
+            cd /home/azureuser/AutoBot
+            source venv/bin/activate
+
+            # 이 짧은 스크립트가 실제로 Slack에 메시지를 보내는지 확인합니다.
+            python3 - <<'PYCODE'
+            import os, requests
+            from dotenv import load_dotenv
+
+            # .env 파일에서 값 읽기
+            load_dotenv('.env')
+            url = os.getenv('SLACK_WEBHOOK_URL')
+            print(f"→ Loaded SLACK_WEBHOOK_URL: {url[:30]}...")
+
+            if not url:
+                raise RuntimeError("SLACK_WEBHOOK_URL이 로드되지 않았습니다!")
+
+            r = requests.post(url, json={'text':'📣 CI pipeline에서 보내는 Slack 테스트 메시지'})
+            print("HTTP status:", r.status_code, r.text)
+            PYCODE
+                      EOF
