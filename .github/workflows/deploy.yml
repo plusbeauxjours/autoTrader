@@ -1,8 +1,8 @@
-name: AutoTrade Deploy
+name: 🚀 Auto Deploy Bot to Azure VM
 
 on:
   push:
-    branches: [main] # main 브랜치 푸시 시 실행
+    branches: [main]
 
 jobs:
   deploy:
@@ -12,21 +12,26 @@ jobs:
       - name: ✅ Checkout repository
         uses: actions/checkout@v3
 
-      - name: 🚀 Set up SSH
+      - name: 🔐 Set up SSH access
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.VM_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H 4.230.11.18 >> ~/.ssh/known_hosts
 
-      - name: 📦 Deploy code to VM
+      - name: 📦 Sync code to Azure VM
         run: |
           rsync -avz --exclude '.git' ./ azureuser@4.230.11.18:/home/azureuser/AutoBot
 
-      - name: ⚙️ Run bot remotely
+      - name: 📦 Install Python deps & restart bot
         run: |
-          ssh azureuser@4.230.11.18 "cd AutoBot && nohup python3 main.py > bot.log 2>&1 &"
+          ssh azureuser@4.230.11.18 "
+            cd /home/azureuser/AutoBot &&
+            pyenv local 3.11.8 &&
+            pip install -r requirements.txt &&
+            pkill -f main.py || true &&
+            nohup python3 main.py > bot.log 2>&1 &
+          "
 
-      - name: 🔧 Setup Python env
-        run: |
-          ssh azureuser@4.230.11.18 "cd AutoBot && pyenv local 3.11.8 && pip install -r requirements.txt"
+      - name: 🎉 Done!
+        run: echo "🚀 Bot deployed and running on Azure VM 🐍"
