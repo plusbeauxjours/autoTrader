@@ -12,6 +12,27 @@ jobs:
       - name: ✅ Checkout repository
         uses: actions/checkout@v3
 
+      - name: 📨 Validate Slack Webhook
+        run: |
+          echo ">>> Slack webhook 검증 시작"
+          if [ -z "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            echo "❌ SLACK_WEBHOOK_URL 환경 변수가 설정되지 않았습니다!"
+            exit 1
+          fi
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H 'Content-type: application/json' \
+            --data '{"text":"🚧 GitHub Actions: Slack 웹훅 검증 테스트"}' \
+            "${{ secrets.SLACK_WEBHOOK_URL }}")
+            
+          echo "Slack webhook response status: $STATUS"
+          if [ "$STATUS" -ne 200 ]; then
+            echo "❌ Slack webhook 테스트 실패! 응답 코드: $STATUS"
+            exit 1
+          fi
+          echo "✅ Slack webhook 검증 완료"
+
       - name: 🔐 Set up SSH access
         run: |
           mkdir -p ~/.ssh
@@ -32,6 +53,13 @@ jobs:
           TWITTER_BEARER_TOKEN=${{ secrets.TWITTER_BEARER_TOKEN }}
           EOT"
 
+          # 환경 변수 파일 권한 및 내용 확인
+          ssh azureuser@4.230.11.18 "
+            chmod 600 /home/azureuser/AutoBot/.env &&
+            echo '>>> .env 파일 확인:' &&
+            cat /home/azureuser/AutoBot/.env | grep -v SECRET | grep -v KEY
+          "
+
       - name: 📦 Set up Python and install dependencies
         run: |
           ssh azureuser@4.230.11.18 "
@@ -49,6 +77,31 @@ jobs:
             python -c 'import ta; print(\"✅ Technical Analysis library installed successfully\")'
           "
 
+      - name: 🔄 Test Slack connection from VM
+        run: |
+          ssh azureuser@4.230.11.18 "
+            cd /home/azureuser/AutoBot &&
+            source venv/bin/activate &&
+            python -c '
+            import os, requests
+            from dotenv import load_dotenv
+            load_dotenv()
+            webhook_url = os.getenv(\"SLACK_WEBHOOK_URL\")
+            print(f\"Webhook URL found: {webhook_url is not None}\")
+            if webhook_url:
+                try:
+                    r = requests.post(webhook_url, json={\"text\":\"🤖 VM에서 보내는 Slack 연결 테스트\"}, timeout=10)
+                    print(f\"Slack response: {r.status_code} {r.text}\")
+                    exit(0 if r.status_code == 200 else 1)
+                except Exception as e:
+                    print(f\"Error: {e}\")
+                    exit(1)
+            else:
+                print(\"No webhook URL found!\")
+                exit(1)
+                        '
+                      "
+
       - name: 🔁 Restart Bot
         run: |
           ssh azureuser@4.230.11.18 "
@@ -64,30 +117,15 @@ jobs:
             pgrep -f main.py || (echo '❌ Bot not running' && exit 1)
           "
 
-      - name: 🎉 Done!
-        run: echo "🎯 Bot deployed and running live on Azure VM! 🚀"
+      - name: ⏲️ Wait for bot initialization
+        run: sleep 10
 
       - name: 🐛 Dump bot.log
         run: |
           ssh azureuser@4.230.11.18 "
-            tail -n 20 /home/azureuser/AutoBot/bot.log || echo 'no bot.log found'
+            echo '>>> 최신 봇 로그:' &&
+            tail -n 30 /home/azureuser/AutoBot/bot.log || echo 'no bot.log found'
           "
 
-      - name: 📨 Send a test notification to Slack
-        run: |
-          echo ">>> Slack test 시작"
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X POST \
-            -H 'Content-type: application/json' \
-            --data '{"text":"🚧 GitHub Actions에서 보내는 Slack 테스트 메시지"}' \
-            "${{ secrets.SLACK_WEBHOOK_URL }}")
-          echo "Slack webhook response status: $STATUS"
-          if [ "$STATUS" -ne 200 ]; then
-            echo "❌ Slack 전송에 실패했습니다."
-            exit 1
-          fi
-          echo "✅ Slack 테스트 메시지 전송 완료"
-
-      - name: 🐛 Dump .env on VM
-        run: |
-          ssh azureuser@4.230.11.18 "nl -ba /home/azureuser/AutoBot/.env"
+      - name: 🎉 Done!
+        run: echo "🎯 Bot deployed and running live on Azure VM! 🚀"
