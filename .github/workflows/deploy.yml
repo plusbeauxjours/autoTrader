@@ -82,25 +82,25 @@ jobs:
           ssh azureuser@4.230.11.18 "
             cd /home/azureuser/AutoBot &&
             source venv/bin/activate &&
-            python -c '
-            import os, requests
-            from dotenv import load_dotenv
-            load_dotenv()
-            webhook_url = os.getenv(\"SLACK_WEBHOOK_URL\")
-            print(f\"Webhook URL found: {webhook_url is not None}\")
-            if webhook_url:
-                try:
-                    r = requests.post(webhook_url, json={\"text\":\"🤖 VM에서 보내는 Slack 연결 테스트\"}, timeout=10)
-                    print(f\"Slack response: {r.status_code} {r.text}\")
-                    exit(0 if r.status_code == 200 else 1)
-                except Exception as e:
-                    print(f\"Error: {e}\")
-                    exit(1)
-            else:
-                print(\"No webhook URL found!\")
-                exit(1)
-                        '
-                      "
+            python -c \"
+import os, requests
+from dotenv import load_dotenv
+load_dotenv()
+webhook_url = os.getenv('SLACK_WEBHOOK_URL')
+print(f'Webhook URL found: {webhook_url is not None}')
+if webhook_url:
+    try:
+        r = requests.post(webhook_url, json={'text':'🤖 VM에서 보내는 Slack 연결 테스트'}, timeout=10)
+        print(f'Slack response: {r.status_code} {r.text}')
+        exit(0 if r.status_code == 200 else 1)
+    except Exception as e:
+        print(f'Error: {e}')
+        exit(1)
+else:
+    print('No webhook URL found!')
+    exit(1)
+            \"
+          "
 
       - name: 🔁 Restart Bot
         run: |
