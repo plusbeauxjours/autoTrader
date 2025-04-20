@@ -33,8 +33,10 @@ def get_signal(symbol):
     s = compute_score(symbol)
     hist = _history.setdefault(symbol, [])
     hist.append(s)
-    if len(hist) < CONFIRM_PERIOD: return 'hold'
+    if len(hist) < CONFIRM_PERIOD: return 'hold', 'Not enough data'
     window = hist[-CONFIRM_PERIOD:]
-    if all(v>=BUY_THRESHOLD for v in window): return 'buy'
-    if all(v<=SELL_THRESHOLD for v in window): return 'sell'
-    return 'hold'
+    if all(v>=BUY_THRESHOLD for v in window): 
+        return 'buy', f'Score above buy threshold for {CONFIRM_PERIOD} periods'
+    if all(v<=SELL_THRESHOLD for v in window):
+        return 'sell', f'Score below sell threshold for {CONFIRM_PERIOD} periods'
+    return 'hold', f'Score between thresholds for {CONFIRM_PERIOD} periods'

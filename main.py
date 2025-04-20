@@ -64,8 +64,9 @@ def trade_logic(trigger_symbol):
     # 시그널 확인
     notify_slack(f"📡 Analyzing {trigger_symbol}...")
     try:
-        sig = get_signal(trigger_symbol)
+        sig, reason = get_signal(trigger_symbol)
         notify_slack(f"📊 Signal for {trigger_symbol}: {sig}")
+        notify_slack(f"📈 Reason: {reason}")
         
         # 매수/매도 신호가 없으면 종료
         if sig not in ('buy', 'sell'):
