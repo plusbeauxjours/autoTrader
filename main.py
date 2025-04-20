@@ -10,14 +10,17 @@ from trade_executor import TradeExecutor
 from logger import log_trade, daily_report
 from notifier import notify
 
+# 환경변수 설정
 SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
-THRESHOLD = 3.0  # % change to trigger
-INTERVAL = 60    # check every 60 seconds
+THRESHOLD = 3.0  # 가격 변동 감지 임계값 (%)
+INTERVAL = 60    # 모니터링 간격 (초)
 
+# 세션 재사용으로 성능 향상
 session = requests.Session()
 last_prices = {}
 
 def notify_slack(message):
+    """슬랙으로 메시지 전송"""
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     log = f"[{timestamp}] {message}"
     print(log)
@@ -28,6 +31,7 @@ def notify_slack(message):
             print(f"[{timestamp}] Slack failed: {e}")
 
 def fetch_all_prices():
+    """모든 USDT 페어의 현재 가격 조회"""
     print("\n🔍 Fetching all prices...")
     url = 'https://fapi.binance.com/fapi/v1/ticker/price'
     try:
@@ -44,87 +48,128 @@ def fetch_all_prices():
         notify_slack(f"❌ Price fetch error: {e}")
         return {}
 
-def trade_logic(trigger_symbol=None):
-    print("\n🔄 Starting trade logic...")
-    syms = [trigger_symbol] if trigger_symbol else get_symbols()
+def trade_logic(trigger_symbol):
+    """트레이딩 로직 실행 - 특정 심볼에 대해서만 실행"""
+    if not trigger_symbol:
+        return
+        
+    notify_slack(f"\n🔄 Starting trade logic for {trigger_symbol}...")
     risk = RiskManager()
-    exec = TradeExecutor()
-    balance = float(exec.cli.futures_account_balance()[6]['balance'])
-    print(f"💰 Current balance: {balance:.2f} USDT")
-
-    for sym in syms:
-        if not risk.can_trade(sym):
-            print(f"⏭️ Skipping {sym} - trading not allowed")
-            continue
+    
+    # 거래 가능 여부 확인
+    if not risk.can_trade(trigger_symbol):
+        notify_slack(f"⏭️ Skipping {trigger_symbol} - trading not allowed")
+        return
+    
+    # 시그널 확인
+    notify_slack(f"📡 Analyzing {trigger_symbol}...")
+    try:
+        sig = get_signal(trigger_symbol)
+        notify_slack(f"📊 Signal for {trigger_symbol}: {sig}")
+        
+        # 매수/매도 신호가 없으면 종료
+        if sig not in ('buy', 'sell'):
+            return
             
-        print(f"\n📡 Checking signal for: {sym}")
-        try:
-            sig = get_signal(sym)
-            print(f"📊 Signal for {sym}: {sig}")
-        except Exception as e:
-            print(f"❌ Signal error for {sym}: {e}")
-            time.sleep(1)
-            continue
-
-        if sig in ('buy', 'sell'):
-            print(f"🎯 Trade signal detected for {sym}: {sig}")
-            df = get_klines(sym)
-            entry = df['close'].iloc[-1]
-            stop = df['close'][:-1].min() if sig == 'buy' else df['close'][:-1].max()
-            print(f"📈 Entry price: {entry:.2f}, Stop price: {stop:.2f}")
-            
-            qty, lev = risk.size_leverage(balance, entry, stop)
-            print(f"📊 Position size: {qty:.3f}, Leverage: {lev}x")
-            
-            exec.set_leverage(sym, lev)
-            print(f"⚙️ Set leverage for {sym} to {lev}x")
-            
-            exec.enter_limit(sym, 'BUY' if sig == 'buy' else 'SELL', qty, entry)
-            print(f"✅ Entered {sig} order for {sym} at {entry:.2f}")
-            
-            tp = entry * 1.10 if sig == 'buy' else entry * 0.90
-            exec.place_oco(sym, 'SELL' if sig == 'buy' else 'BUY', qty, stop, tp)
-            print(f"✅ Placed OCO order - TP: {tp:.2f}, SL: {stop:.2f}")
-            
-            pnl = (tp - entry) / entry * qty
-            risk.register(pnl, sym)
-            print(f"📊 Expected PnL: {pnl:.2f} USDT")
-            
-            log_trade({'symbol': sym, 'side': sig, 'entry': entry, 'exit': tp, 'pnl': pnl})
-            notify(f"{sym} {sig}@{entry:.2f}, qty={qty:.3f}, lev={lev}x")
-            print(f"📝 Trade logged and notification sent")
-
-        time.sleep(1)
+        # 실행 단계
+        notify_slack(f"🎯 Trade signal detected for {trigger_symbol}: {sig}")
+        
+        # 트레이드 실행기 초기화
+        exec = TradeExecutor()
+        balance = float(exec.cli.futures_account_balance()[6]['balance'])
+        notify_slack(f"💰 Current balance: {balance:.2f} USDT")
+        
+        # 가격 데이터 조회
+        df = get_klines(trigger_symbol)
+        entry = df['close'].iloc[-1]
+        stop = df['close'][:-1].min() if sig == 'buy' else df['close'][:-1].max()
+        notify_slack(f"📈 Entry price: {entry:.2f}, Stop price: {stop:.2f}")
+        
+        # 포지션 크기 및 레버리지 계산
+        qty, lev = risk.size_leverage(balance, entry, stop)
+        notify_slack(f"📊 Position size: {qty:.3f}, Leverage: {lev}x")
+        
+        # 레버리지 설정
+        exec.set_leverage(trigger_symbol, lev)
+        notify_slack(f"⚙️ Set leverage for {trigger_symbol} to {lev}x")
+        
+        # 주문 실행
+        order_side = 'BUY' if sig == 'buy' else 'SELL'
+        exec.enter_limit(trigger_symbol, order_side, qty, entry)
+        notify_slack(f"✅ Entered {sig} order for {trigger_symbol} at {entry:.2f}")
+        
+        # TP/SL 설정
+        tp = entry * 1.10 if sig == 'buy' else entry * 0.90
+        exec.place_oco(trigger_symbol, 'SELL' if sig == 'buy' else 'BUY', qty, stop, tp)
+        notify_slack(f"✅ Placed OCO order - TP: {tp:.2f}, SL: {stop:.2f}")
+        
+        # 예상 PnL 계산 및 등록
+        pnl = (tp - entry) / entry * qty * lev
+        risk.register(pnl, trigger_symbol)
+        notify_slack(f"📊 Expected PnL: {pnl:.2f} USDT")
+        
+        # 로그 기록 및 알림
+        log_trade({'symbol': trigger_symbol, 'side': sig, 'entry': entry, 'exit': tp, 'pnl': pnl})
+        notify(f"{trigger_symbol} {sig}@{entry:.2f}, qty={qty:.3f}, lev={lev}x")
+        notify_slack(f"📝 Trade logged and notification sent")
+        
+    except Exception as e:
+        notify_slack(f"❌ Trading error for {trigger_symbol}: {e}")
 
 def monitor():
+    """가격 모니터링 및 이상 징후 감지"""
     global last_prices
-    print("\n🚀 Starting Binance anomaly monitor + trader")
-    notify_slack("🚀 Binance anomaly monitor + trader started.")
     
+    notify_slack("\n🚀 Starting Binance anomaly monitor + trader")
+    
+    # 초기 가격 데이터 로드
     last_prices = fetch_all_prices()
     if not last_prices:
         notify_slack("❌ Initial fetch failed. Exit.")
         return
 
+    # 매일 보고서 날짜 추적
+    last_report_day = datetime.now().day
+    
+    # 메인 모니터링 루프
     while True:
+        # 주기적 데일리 리포트 생성
+        current_day = datetime.now().day
+        if current_day != last_report_day:
+            daily_report()
+            last_report_day = current_day
+        
         print("\n🔁 Monitoring prices...")
         time.sleep(INTERVAL)
+        
+        # 최신 가격 조회
         current_prices = fetch_all_prices()
         if not current_prices:
             continue
 
+        # 가격 변동 확인
         for symbol in current_prices:
             old = last_prices.get(symbol)
-            new = current_prices[symbol]
             if old is None:
                 continue
+                
+            new = current_prices[symbol]
             change_pct = (new - old) / old * 100
+            
+            # 이상 징후 감지
             if abs(change_pct) >= THRESHOLD:
-                print(f"🚨 Anomaly detected: {symbol} {change_pct:+.2f}%")
-                notify_slack(f"🚨 Detected anomaly: {symbol} {change_pct:+.2f}%")
-                trade_logic(trigger_symbol=symbol)  # Only check the symbol that triggered the anomaly
+                notify_slack(f"🚨 Anomaly detected: {symbol} {change_pct:+.2f}%")
+                
+                # 해당 심볼에 대해 트레이딩 로직 실행
+                trade_logic(symbol)
 
-        last_prices = current_prices  # 재사용
+        # 가격 데이터 업데이트
+        last_prices = current_prices
 
 if __name__ == "__main__":
-    monitor()
+    try:
+        monitor()
+    except KeyboardInterrupt:
+        print("\n🛑 Bot stopped by user")
+    except Exception as e:
+        notify_slack(f"❌ Critical error: {e}")
