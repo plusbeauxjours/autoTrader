@@ -1,0 +1,9 @@
+python-binance
+tweepy
+python-dotenv
+pandas
+numpy
+TA-Lib
+vaderSentiment
+matplotlib
+schedule

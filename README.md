@@ -110,6 +110,3 @@ main.py
 ## 📬 Contributions
 
 Feel free to open issues, suggest improvements, or fork for your own strategies!
-# CoinTradingProgram
-# CoinTradingProgram
-# autoTrader
