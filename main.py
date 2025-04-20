@@ -2,9 +2,10 @@ import os
 import time
 import requests
 from datetime import datetime, timedelta
+import atexit
 
 from data_fetcher import get_symbols, get_klines
-from signal_generator import get_signal
+from signal_generator import get_signal, cleanup_history
 from risk_manager import RiskManager
 from trade_executor import TradeExecutor
 from logger import log_trade, daily_report
@@ -14,14 +15,29 @@ from notifier import notify
 SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
 THRESHOLD = 3.0  # 가격 변동 감지 임계값 (%)
 INTERVAL = 60    # 모니터링 간격 (초)
+MAX_SYMBOLS = 500  # 최대 모니터링 심볼 수
 
 # 세션 재사용으로 성능 향상
 session = requests.Session()
 last_prices = {}
 
+# 자원 정리 함수
+def cleanup_resources():
+    """프로그램 종료 시 리소스 정리"""
+    if session:
+        session.close()
+    notify_slack("🛑 Bot shutting down, cleaning up resources")
+
+# 종료 시 리소스 정리 등록
+atexit.register(cleanup_resources)
+
 # 캐시 변수 추가
 balance_cache = {'value': None, 'timestamp': None}
 balance_cache_duration = 300  # 5분
+
+# 마지막 메모리 정리 시간
+last_cleanup_time = datetime.now()
+cleanup_interval = 3600  # 1시간마다 메모리 정리
 
 def get_cached_balance(exec):
     """잔고 정보를 캐시하여 불필요한 API 호출 방지"""
@@ -32,6 +48,44 @@ def get_cached_balance(exec):
         balance_cache['value'] = float(exec.cli.futures_account_balance()[6]['balance'])
         balance_cache['timestamp'] = now
     return balance_cache['value']
+
+def perform_periodic_cleanup():
+    """주기적으로 메모리 정리 작업 수행"""
+    global last_cleanup_time
+    now = datetime.now()
+    
+    # 마지막 정리 이후 정해진 시간이 지났는지 확인
+    if (now - last_cleanup_time).total_seconds() > cleanup_interval:
+        notify_slack("🧹 Performing memory cleanup")
+        
+        # 시그널 제너레이터 히스토리 정리
+        cleanup_history()
+        
+        # 필요 없는 가격 데이터 정리
+        if len(last_prices) > MAX_SYMBOLS:
+            # 가격 변동이 적은 심볼부터 제거
+            symbols_to_remove = len(last_prices) - MAX_SYMBOLS
+            if symbols_to_remove > 0:
+                # 전체 가격 변동 계산
+                price_changes = {}
+                for sym, price in last_prices.items():
+                    old_price = last_prices.get(sym, price)
+                    price_changes[sym] = abs((price - old_price) / old_price) if old_price else 0
+                
+                # 가격 변동이 적은 순으로 정렬
+                sorted_symbols = sorted(price_changes.items(), key=lambda x: x[1])
+                
+                # 가장 변동이 적은 심볼 제거
+                for sym, _ in sorted_symbols[:symbols_to_remove]:
+                    del last_prices[sym]
+        
+        # 캐시 정리
+        if (now - balance_cache['timestamp']).total_seconds() > 86400:  # 24시간 이상 지난 경우
+            balance_cache['value'] = None
+            balance_cache['timestamp'] = None
+        
+        last_cleanup_time = now
+        notify_slack(f"✅ Cleanup complete. Monitoring {len(last_prices)} symbols")
 
 def notify_slack(message):
     """슬랙으로 메시지 전송"""
@@ -154,6 +208,9 @@ def monitor():
             daily_report()
             last_report_day = current_day
         
+        # 주기적 메모리 정리
+        perform_periodic_cleanup()
+        
         print("\n🔁 Monitoring prices...")
         time.sleep(INTERVAL)
         
@@ -186,5 +243,7 @@ if __name__ == "__main__":
         monitor()
     except KeyboardInterrupt:
         print("\n🛑 Bot stopped by user")
+        cleanup_resources()
     except Exception as e:
         notify_slack(f"❌ Critical error: {e}")
+        cleanup_resources()
