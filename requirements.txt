@@ -7,3 +7,5 @@ TA-Lib
 vaderSentiment
 matplotlib
 schedule
+pytest
+pytest-mock

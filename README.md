@@ -83,6 +83,29 @@ SLACK_WEBHOOK_URL=https://hooks.slack.com/...
 python main.py
 ```
 
+### 4. Testing
+
+The project includes comprehensive unit tests for all major components. To run the tests:
+
+```bash
+pytest tests/
+```
+
+Test coverage includes:
+
+- Data fetching and processing
+- Signal generation and analysis
+- Risk management
+- Trade execution
+- Main monitoring logic
+
+Each test file (`test_*.py`) corresponds to a module in the project and includes:
+
+- Unit tests for individual functions
+- Mock implementations for external APIs
+- Error handling scenarios
+- Edge cases
+
 ---
 
 ## 🧠 Architecture

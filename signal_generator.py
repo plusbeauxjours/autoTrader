@@ -18,15 +18,16 @@ def compute_score(symbol):
     latest = df.iloc[-1]
     # simple TA score
     ta_score = 0
-    if latest['rsi'] < 30 and latest['close'] < latest['bb_lower']: ta_score+=1
-    if latest['rsi'] > 70 and latest['close'] > latest['bb_upper']: ta_score-=1
+    if latest['rsi'] < 30 and latest['close'] < latest['bb_lower']: ta_score += 1
+    if latest['rsi'] > 70 and latest['close'] > latest['bb_upper']: ta_score -= 1
     ta_score += 1 if latest['macd'] > latest['macd_sig'] else -1
-    ta_score /= 3
+    ta_score = (ta_score + 1) / 3  # Normalize to [0,1] range
     # sentiment
     text_list = get_tweets(symbol[:-4])
     sent = sentiment_score(text_list)
     sent_sig = 1 if sent>0.2 else (-1 if sent<-0.2 else 0)
-    return 0.5*ta_score + 0.5*sent_sig
+    final_score = 0.5*ta_score + 0.5*sent_sig
+    return final_score
 
 def get_signal(symbol):
     s = compute_score(symbol)

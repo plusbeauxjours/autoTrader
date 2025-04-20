@@ -19,8 +19,23 @@ class TradeExecutor:
         )
 
     def place_oco(self, sym, side, qty, stop, tp):
-        return self.cli.futures_create_oco_order(
-            symbol=sym, side=side.upper(), quantity=qty,
-            stopPrice=stop, stopLimitPrice=round(stop*0.995,2),
-            stopLimitTimeInForce='GTC', price=tp
+        return self.cli.futures_place_batch_orders(
+            batchOrders=[
+                {
+                    'symbol': sym,
+                    'side': side.upper(),
+                    'type': 'LIMIT',
+                    'timeInForce': 'GTC',
+                    'quantity': qty,
+                    'price': tp
+                },
+                {
+                    'symbol': sym,
+                    'side': side.upper(),
+                    'type': 'STOP_MARKET',
+                    'timeInForce': 'GTC',
+                    'quantity': qty,
+                    'stopPrice': stop
+                }
+            ]
         )
