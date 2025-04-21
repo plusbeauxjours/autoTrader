@@ -130,42 +130,20 @@ def get_cached_balance(exec):
     return balance_cache['value']
 
 def perform_periodic_cleanup():
-    """주기적으로 메모리 정리 작업 수행"""
-    global last_cleanup_time
+    """주기적인 메모리 정리 수행"""
     now = datetime.now()
     
-    # 마지막 정리 이후 정해진 시간이 지났는지 확인
-    if (now - last_cleanup_time).total_seconds() > cleanup_interval:
-        notify_slack("🧹 Performing memory cleanup")
+    # balance_cache가 없거나 timestamp가 None인 경우 초기화
+    if 'balance_cache' not in globals() or balance_cache['timestamp'] is None:
+        balance_cache['timestamp'] = now
+        balance_cache['balance'] = None
+        return
         
-        # 시그널 제너레이터 히스토리 정리
-        cleanup_history()
-        
-        # 필요 없는 가격 데이터 정리
-        if len(last_prices) > MAX_SYMBOLS:
-            # 가격 변동이 적은 심볼부터 제거
-            symbols_to_remove = len(last_prices) - MAX_SYMBOLS
-            if symbols_to_remove > 0:
-                # 전체 가격 변동 계산
-                price_changes = {}
-                for sym, price in last_prices.items():
-                    old_price = last_prices.get(sym, price)
-                    price_changes[sym] = abs((price - old_price) / old_price) if old_price else 0
-                
-                # 가격 변동이 적은 순으로 정렬
-                sorted_symbols = sorted(price_changes.items(), key=lambda x: x[1])
-                
-                # 가장 변동이 적은 심볼 제거
-                for sym, _ in sorted_symbols[:symbols_to_remove]:
-                    del last_prices[sym]
-        
-        # 캐시 정리
-        if (now - balance_cache['timestamp']).total_seconds() > 86400:  # 24시간 이상 지난 경우
-            balance_cache['value'] = None
-            balance_cache['timestamp'] = None
-        
-        last_cleanup_time = now
-        notify_slack(f"✅ Cleanup complete. Monitoring {len(last_prices)} symbols")
+    # 24시간 이상 지난 경우 캐시 초기화
+    if (now - balance_cache['timestamp']).total_seconds() > 86400:
+        balance_cache['timestamp'] = now
+        balance_cache['balance'] = None
+        notify_slack("🧹 Balance cache cleared after 24 hours")
 
 def notify_slack(message):
     """슬랙으로 메시지 전송"""
