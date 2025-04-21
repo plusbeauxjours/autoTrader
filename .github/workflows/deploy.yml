@@ -87,15 +87,30 @@ jobs:
 
       - name: 🔁 Restart Bot
         run: |
-          ssh azureuser@4.230.11.18 "
+          ssh -i ~/.ssh/id_ed25519 azureuser@4.230.11.18 << 'EOF'
             set -xe
-            pkill -f main.py || true
+
+            # 작업 디렉토리로 이동
             cd /home/azureuser/autoTrader
-            source venv/bin/activate
-            /usr/bin/nohup python3 main.py > bot.log 2>&1 &
-            echo \"LAUNCHED PID=$!\" >> bot.log
-            ps -f -p $! >> bot.log || echo \"PID $! not found\" >> bot.log
-          "
+
+            # 기존 프로세스 종료
+            pkill -f main.py || true
+            sleep 2
+
+            # 새로운 프로세스를 nohup + & 로 띄우고 disown 해서 SSH 세션에 묶이지 않게 분리
+            nohup python3 main.py > bot.log 2>&1 &
+            disown
+
+            # 백그라운드로 잘 올라갔는지 확인
+            sleep 2
+            if pgrep -f main.py > /dev/null; then
+              echo '✅ Bot started successfully'
+            else
+              echo '❌ Failed to start bot, dump log below:' 
+              cat bot.log
+              exit 1
+            fi
+          EOF
 
       - name: 🔍 Check if Bot is Running
         run: |
