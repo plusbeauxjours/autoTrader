@@ -85,14 +85,18 @@ jobs:
             python3 -c 'import os; from dotenv import load_dotenv; import requests; load_dotenv(\".env\"); url = os.getenv(\"SLACK_WEBHOOK_URL\"); print(f\"SLACK_WEBHOOK_URL: {url[:30]}...\"); r = requests.post(url, json={\"text\": \"[TEST] Notification from Azure VM\"}); print(f\"Status: {r.status_code}\")'
           "
 
-      - name: 🔁 Restart Bot
+        - name: 🔁 Restart Bot
         run: |
-          ssh azureuser@4.230.11.18 "
-            pkill -f main.py || true &&
-            cd /home/azureuser/autoTrader &&
-            source venv/bin/activate &&
-            nohup venv/bin/python3 main.py > bot.log 2>&1 &
-          "
+          ssh azureuser@4.230.11.18 << 'EOF'
+            set -xe  # (디버깅용) 실행되는 명령을 모두 출력합니다
+            pkill -f main.py || true
+            cd /home/azureuser/autoTrader
+            source venv/bin/activate
+            # nohup으로 백그라운드 실행하고, PID와 ps 상태를 로그에 남김
+            /usr/bin/nohup python3 main.py > bot.log 2>&1 &
+            echo "LAUNCHED PID=$!" >> bot.log
+            ps -f -p $! >> bot.log || echo "PID $! not found" >> bot.log
+          EOF
 
       - name: 🔍 Check if Bot is Running
         run: |
@@ -118,10 +122,10 @@ jobs:
 
       - name: 🐛 Dump bot.log
         run: |
-          ssh azureuser@4.230.11.18 "
-            echo '>>> 최신 봇 로그:' &&
+          ssh azureuser@4.230.11.18 << 'EOF'
+            echo '>>> 최신 봇 로그:'
             tail -n 30 /home/azureuser/autoTrader/bot.log || echo 'no bot.log found'
-          "
+          EOF
 
       - name: 🎉 Done!
         run: echo "🎯 Bot deployed and running live on Azure VM! 🚀"
