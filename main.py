@@ -200,56 +200,75 @@ def trade_logic(trigger_symbol):
         sig, reason = get_signal(trigger_symbol)
         notify_slack(f"📊 Signal for {trigger_symbol}: {sig}")
         notify_slack(f"📈 Reason: {reason}")
-        
-        # 매수/매도 신호가 없으면 종료
-        if sig not in ('buy', 'sell'):
-            return
-            
-        # 실행 단계
-        notify_slack(f"🎯 Trade signal detected for {trigger_symbol}: {sig}")
-        
-        # 트레이드 실행기 초기화
-        exec = TradeExecutor()
-        balance = get_cached_balance(exec)
-        notify_slack(f"💰 Current balance: {balance:.2f} USDT")
-        
-        # 가격 데이터 조회
-        df = get_klines(trigger_symbol)
-        entry = df['close'].iloc[-1]
-        stop = df['close'][:-1].min() if sig == 'buy' else df['close'][:-1].max()
-        notify_slack(f"📈 Entry price: {entry:.2f}, Stop price: {stop:.2f}")
-        
-        # 포지션 크기 및 레버리지 계산
-        qty, lev = risk.size_leverage(balance, entry, stop)
-        notify_slack(f"📊 Position size: {qty:.3f}, Leverage: {lev}x")
-        
-        # 레버리지 설정
-        exec.set_leverage(trigger_symbol, lev)
-        notify_slack(f"⚙️ Set leverage for {trigger_symbol} to {lev}x")
-        
-        # 주문 실행
-        order_side = 'BUY' if sig == 'buy' else 'SELL'
-        exec.enter_limit(trigger_symbol, order_side, qty, entry)
-        notify_slack(f"✅ Entered {sig} order for {trigger_symbol} at {entry:.2f}")
-        
-        # TP/SL 설정
-        tp = entry * 1.10 if sig == 'buy' else entry * 0.90
-        exec.place_oco(trigger_symbol, 'SELL' if sig == 'buy' else 'BUY', qty, stop, tp)
-        notify_slack(f"✅ Placed OCO order - TP: {tp:.2f}, SL: {stop:.2f}")
-        
-        # 예상 PnL 계산 및 등록
-        pnl = (tp - entry) / entry * qty * lev
-        risk.register(pnl, trigger_symbol)
-        notify_slack(f"📊 Expected PnL: {pnl:.2f} USDT")
-        
-        # 로그 기록 및 알림
-        log_trade({'symbol': trigger_symbol, 'side': sig, 'entry': entry, 'exit': tp, 'pnl': pnl})
-        notify(f"{trigger_symbol} {sig}@{entry:.2f}, qty={qty:.3f}, lev={lev}x")
-        notify_slack(f"📝 Trade logged and notification sent")
-        
     except Exception as e:
-        notify_slack(f"❌ Trading error for {trigger_symbol}: {e}")
-        logging.error(f"거래 오류 ({trigger_symbol}): {e}")
+        notify_slack(f"❌ Signal generation error for {trigger_symbol}: {str(e)}")
+        return
+        
+    # 매수/매도 신호가 없으면 종료
+    if sig not in ('buy', 'sell'):
+        return
+            
+    # 실행 단계
+    notify_slack(f"🎯 Trade signal detected for {trigger_symbol}: {sig}")
+    
+    # 트레이드 실행기 초기화 및 재시도 로직
+    max_retries = 3
+    retry_delay = 5  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            exec = TradeExecutor()
+            balance = get_cached_balance(exec)
+            notify_slack(f"💰 Current balance: {balance:.2f} USDT")
+            
+            # 가격 데이터 조회
+            df = get_klines(trigger_symbol)
+            entry = df['close'].iloc[-1]
+            stop = df['close'][:-1].min() if sig == 'buy' else df['close'][:-1].max()
+            notify_slack(f"📈 Entry price: {entry:.2f}, Stop price: {stop:.2f}")
+            
+            # 포지션 크기 및 레버리지 계산
+            qty, lev = risk.size_leverage(balance, entry, stop)
+            notify_slack(f"📊 Position size: {qty:.3f}, Leverage: {lev}x")
+            
+            # 레버리지 설정
+            exec.set_leverage(trigger_symbol, lev)
+            notify_slack(f"⚙️ Set leverage for {trigger_symbol} to {lev}x")
+            
+            # 주문 실행
+            order_side = 'BUY' if sig == 'buy' else 'SELL'
+            exec.enter_limit(trigger_symbol, order_side, qty, entry)
+            notify_slack(f"✅ Entered {sig} order for {trigger_symbol} at {entry:.2f}")
+            
+            # TP/SL 설정
+            tp = entry * 1.10 if sig == 'buy' else entry * 0.90
+            exec.place_oco(trigger_symbol, 'SELL' if sig == 'buy' else 'BUY', qty, stop, tp)
+            notify_slack(f"✅ Placed OCO order - TP: {tp:.2f}, SL: {stop:.2f}")
+            
+            # 예상 PnL 계산 및 등록
+            pnl = (tp - entry) / entry * qty * lev
+            risk.register(pnl, trigger_symbol)
+            notify_slack(f"📊 Expected PnL: {pnl:.2f} USDT")
+            
+            # 로그 기록 및 알림
+            log_trade({'symbol': trigger_symbol, 'side': sig, 'entry': entry, 'exit': tp, 'pnl': pnl})
+            notify(f"{trigger_symbol} {sig}@{entry:.2f}, qty={qty:.3f}, lev={lev}x")
+            notify_slack(f"📝 Trade logged and notification sent")
+            
+            # 성공적으로 완료되면 루프 종료
+            break
+            
+        except (requests.exceptions.RequestException, ConnectionError) as e:
+            if attempt < max_retries - 1:
+                notify_slack(f"⚠️ Connection error (attempt {attempt + 1}/{max_retries}): {str(e)}")
+                time.sleep(retry_delay)
+                continue
+            else:
+                notify_slack(f"❌ Trading error for {trigger_symbol}: Max retries exceeded. Last error: {str(e)}")
+                return
+        except Exception as e:
+            notify_slack(f"❌ Trading error for {trigger_symbol}: {str(e)}")
+            return
 
 def monitor():
     """가격 모니터링 및 이상 징후 감지"""
