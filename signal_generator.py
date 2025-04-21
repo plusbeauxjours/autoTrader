@@ -1,6 +1,7 @@
 from data_fetcher import get_klines, get_tweets
 from technical_analysis import apply_indicators
 from sentiment_analysis import sentiment_score
+from notifier import notify_slack
 import requests
 import time
 from datetime import datetime
@@ -17,21 +18,25 @@ def detect_spike(df):
     return df['volume'].iloc[-1] > SPIKE_FACTOR * df['volume'][:-1].mean()
 
 def compute_score(symbol):
-    df = apply_indicators(get_klines(symbol))
-    if not detect_spike(df): return 0.0
-    latest = df.iloc[-1]
-    # simple TA score
-    ta_score = 0
-    if latest['rsi'] < 30 and latest['close'] < latest['bb_lower']: ta_score += 1
-    if latest['rsi'] > 70 and latest['close'] > latest['bb_upper']: ta_score -= 1
-    ta_score += 1 if latest['macd'] > latest['macd_sig'] else -1
-    ta_score = (ta_score + 1) / 3  # Normalize to [0,1] range
-    # sentiment
-    text_list = get_tweets(symbol[:-4])
-    sent = sentiment_score(text_list)
-    sent_sig = 1 if sent>0.2 else (-1 if sent<-0.2 else 0)
-    final_score = 0.5*ta_score + 0.5*sent_sig
-    return final_score
+    try:
+        df = apply_indicators(get_klines(symbol))
+        if not detect_spike(df): return 0.0
+        latest = df.iloc[-1]
+        # simple TA score
+        ta_score = 0
+        if latest['rsi'] < 30 and latest['close'] < latest['bb_lower']: ta_score += 1
+        if latest['rsi'] > 70 and latest['close'] > latest['bb_upper']: ta_score -= 1
+        ta_score += 1 if latest['macd'] > latest['macd_sig'] else -1
+        ta_score = (ta_score + 1) / 3  # Normalize to [0,1] range
+        # sentiment
+        text_list = get_tweets(symbol[:-4])
+        sent = sentiment_score(text_list)
+        sent_sig = 1 if sent>0.2 else (-1 if sent<-0.2 else 0)
+        final_score = 0.5*ta_score + 0.5*sent_sig
+        return final_score
+    except Exception as e:
+        notify_slack(f"❌ Error in compute_score for {symbol}: {str(e)}")
+        return 0.0
 
 def get_signal(symbol):
     s = compute_score(symbol)

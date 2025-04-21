@@ -186,7 +186,7 @@ def trade_logic(trigger_symbol):
     if not trigger_symbol:
         return
         
-    notify_slack(f"\n🔄 Starting trade logic for {trigger_symbol}...")
+    notify_slack(f"🔄 Starting trade logic for {trigger_symbol}...")
     risk = RiskManager()
     
     # 거래 가능 여부 확인
@@ -315,6 +315,7 @@ def monitor():
             
             # 이상 징후 감지
             if abs(change_pct) >= THRESHOLD:
+                notify_slack("\n")
                 notify_slack(f"🚨 Anomaly detected: {symbol} {change_pct:+.2f}%")
                 
                 # 해당 심볼에 대해 트레이딩 로직 실행
