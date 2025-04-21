@@ -102,27 +102,28 @@ def get_tweets(symbol):
         response = requests.get(
             "https://api.twitter.com/2/tweets/search/recent",
             headers={"Authorization": f"Bearer {twitter_token}"},
-            params={"query": f"#{symbol} lang:en", "max_results": 100}
+            params={"query": f"#{symbol} lang:en", "max_results": 50}  # 최대 결과 수를 50으로 제한
         )
         
         # Rate limit 정보 확인
         if 'x-rate-limit-remaining' in response.headers:
             remaining = int(response.headers['x-rate-limit-remaining'])
             reset_time = int(response.headers['x-rate-limit-reset'])
-            print(f"Twitter API - Remaining calls: {remaining}, Reset time: {datetime.fromtimestamp(reset_time)}")
             
-            if remaining < 10:  # 임계값 이하일 때 경고
+            # Rate limit이 임계값 이하일 때 경고
+            if remaining < 5:  # 임계값을 5로 낮춤
                 notify_slack(f"⚠️ Twitter API rate limit warning: {remaining} calls remaining")
-        
-        if response.status_code == 429:
-            reset_time = int(response.headers['x-rate-limit-reset'])
-            wait_time = reset_time - int(time.time())
-            notify_slack(f"❌ Twitter API rate limit exceeded. Waiting {wait_time} seconds")
-            time.sleep(wait_time + 1)  # 리셋 시간까지 대기
-            return get_tweets(symbol)  # 재시도
+                return []  # Rate limit이 낮으면 빈 결과 반환
+            
+            # Rate limit 초과 시
+            if response.status_code == 429:
+                reset_time = int(response.headers['x-rate-limit-reset'])
+                wait_time = reset_time - int(time.time())
+                notify_slack(f"❌ Twitter API rate limit exceeded. Skipping tweets for {symbol}")
+                return []  # Rate limit 초과 시 빈 결과 반환
             
         response.raise_for_status()
         return response.json().get('data', [])
     except Exception as e:
-        notify_slack(f"❌ Twitter API error: {str(e)}")
+        notify_slack(f"❌ Twitter API error for {symbol}: {str(e)}")
         return []
