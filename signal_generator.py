@@ -33,10 +33,27 @@ def compute_score(symbol):
         if latest['rsi'] > 70 and latest['close'] > latest['bb_upper']: ta_score -= 1
         ta_score += 1 if latest['macd'] > latest['macd_sig'] else -1
         ta_score = (ta_score + 1) / 3  # Normalize to [0,1] range
+        
         # sentiment
         text_list = get_tweets(symbol[:-4])
         sent = sentiment_score(text_list)
         sent_sig = 1 if sent>0.2 else (-1 if sent<-0.2 else 0)
+        
+        # 트윗 감성 분석 결과를 Slack으로 전송
+        if text_list:
+            tweet_links = [f"https://twitter.com/user/status/{tweet['id']}" for tweet in text_list]
+            sentiment_message = (
+                f"📊 *{symbol} Sentiment Analysis*\n"
+                f"• Score: {sent:.2f}\n"
+                f"• Signal: {sent_sig}\n"
+                f"• Analyzed Tweets: {len(text_list)}\n"
+                f"• Sample Tweet Links:\n"
+            )
+            # 최대 5개의 트윗 링크만 표시
+            for link in tweet_links[:5]:
+                sentiment_message += f"  - {link}\n"
+            notify_slack(sentiment_message)
+        
         final_score = 0.5*ta_score + 0.5*sent_sig
         return final_score
     except Exception as e:
