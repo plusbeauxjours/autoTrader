@@ -1,6 +1,9 @@
 from data_fetcher import get_klines, get_tweets
 from technical_analysis import apply_indicators
 from sentiment_analysis import sentiment_score
+import requests
+import time
+from datetime import datetime
 
 SPIKE_FACTOR = 3.0
 CONFIRM_PERIOD = 3
@@ -58,3 +61,35 @@ def cleanup_history():
         to_remove = symbols[:len(symbols)//2]
         for sym in to_remove:
             del _history[sym]
+
+def get_tweets(symbol):
+    """트위터에서 관련 트윗 가져오기"""
+    try:
+        # Twitter API 호출 전 상태 확인
+        response = requests.get(
+            "https://api.twitter.com/2/tweets/search/recent",
+            headers={"Authorization": f"Bearer {TWITTER_BEARER_TOKEN}"},
+            params={"query": f"#{symbol} lang:en", "max_results": 100}
+        )
+        
+        # Rate limit 정보 확인
+        if 'x-rate-limit-remaining' in response.headers:
+            remaining = int(response.headers['x-rate-limit-remaining'])
+            reset_time = int(response.headers['x-rate-limit-reset'])
+            print(f"Twitter API - Remaining calls: {remaining}, Reset time: {datetime.fromtimestamp(reset_time)}")
+            
+            if remaining < 10:  # 임계값 이하일 때 경고
+                notify_slack(f"⚠️ Twitter API rate limit warning: {remaining} calls remaining")
+        
+        if response.status_code == 429:
+            reset_time = int(response.headers['x-rate-limit-reset'])
+            wait_time = reset_time - int(time.time())
+            notify_slack(f"❌ Twitter API rate limit exceeded. Waiting {wait_time} seconds")
+            time.sleep(wait_time + 1)  # 리셋 시간까지 대기
+            return get_tweets(symbol)  # 재시도
+            
+        response.raise_for_status()
+        return response.json().get('data', [])
+    except Exception as e:
+        notify_slack(f"❌ Twitter API error: {str(e)}")
+        return []
