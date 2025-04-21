@@ -4,6 +4,7 @@ from sentiment_analysis import sentiment_score
 from notifier import notify_slack
 import requests
 import time
+import os
 from datetime import datetime
 
 SPIKE_FACTOR = 3.0
@@ -70,10 +71,16 @@ def cleanup_history():
 def get_tweets(symbol):
     """트위터에서 관련 트윗 가져오기"""
     try:
+        # Get Twitter API token from environment variables
+        twitter_token = os.getenv("TWITTER_BEARER_TOKEN")
+        if not twitter_token:
+            notify_slack("❌ Twitter API token not found in environment variables")
+            return []
+            
         # Twitter API 호출 전 상태 확인
         response = requests.get(
             "https://api.twitter.com/2/tweets/search/recent",
-            headers={"Authorization": f"Bearer {TWITTER_BEARER_TOKEN}"},
+            headers={"Authorization": f"Bearer {twitter_token}"},
             params={"query": f"#{symbol} lang:en", "max_results": 100}
         )
         
