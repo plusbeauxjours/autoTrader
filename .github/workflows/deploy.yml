@@ -67,7 +67,7 @@ jobs:
             python3 -m venv venv &&
             source venv/bin/activate &&
             pip install --upgrade pip &&
-            pip install -r requirements.txt
+            pip install -r requirements.txt python-dotenv
           "
 
       - name: ✅ Verify TA-Lib (via `ta` package)
@@ -75,6 +75,14 @@ jobs:
           ssh azureuser@4.230.11.18 "
             source /home/azureuser/autoTrader/venv/bin/activate &&
             python -c 'import ta; print(\"✅ Technical Analysis library installed successfully\")'
+          "
+
+      - name: 🔍 Test Slack Notification
+        run: |
+          ssh azureuser@4.230.11.18 "
+            cd /home/azureuser/autoTrader &&
+            source venv/bin/activate &&
+            python3 -c 'import os; from dotenv import load_dotenv; import requests; load_dotenv(\".env\"); url = os.getenv(\"SLACK_WEBHOOK_URL\"); print(f\"SLACK_WEBHOOK_URL: {url[:30]}...\"); r = requests.post(url, json={\"text\": \"[TEST] Notification from Azure VM\"}); print(f\"Status: {r.status_code}\")'
           "
 
       - name: 🔁 Restart Bot
@@ -100,6 +108,44 @@ jobs:
           ssh azureuser@4.230.11.18 "
             echo '>>> 최신 봇 로그:' &&
             tail -n 30 /home/azureuser/autoTrader/bot.log || echo 'no bot.log found'
+          "
+
+      - name: 🔍 Verify Environment Variables
+        run: |
+          ssh azureuser@4.230.11.18 "
+            cd /home/azureuser/autoTrader &&
+            source venv/bin/activate &&
+            
+            # .env 파일 내용 확인
+            echo '>>> .env file contents (excluding secrets):' &&
+            cat .env | grep -v SECRET | grep -v KEY &&
+            
+            # Python으로 환경 변수 확인
+            python3 -c '
+              import os
+              from dotenv import load_dotenv
+
+              print(\"Loading .env file...\")
+              load_dotenv(\".env\", override=True)
+
+              print(\"Checking environment variables...\")
+              required_vars = [\"SLACK_WEBHOOK_URL\", \"BINANCE_API_KEY\", \"BINANCE_API_SECRET\", \"TWITTER_BEARER_TOKEN\"]
+              all_set = True
+
+              for var in required_vars:
+                  value = os.getenv(var)
+                  if value:
+                      print(f\"✅ {var} is set\")
+                  else:
+                      print(f\"❌ {var} is not set\")
+                      all_set = False
+
+              if not all_set:
+                  print(\"❌ Some required environment variables are missing!\")
+                  exit(1)
+              else:
+                  print(\"✅ All environment variables are set\")
+              '
           "
 
       - name: 🎉 Done!
