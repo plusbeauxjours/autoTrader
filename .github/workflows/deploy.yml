@@ -42,11 +42,11 @@ jobs:
 
       - name: 📦 Sync code to Azure VM
         run: |
-          rsync -avz --exclude '.git' ./ azureuser@4.230.11.18:/home/azureuser/AutoBot
+          rsync -avz --exclude '.git' ./ azureuser@4.230.11.18:/home/azureuser/autoTrader
 
       - name: 📄 Write .env file to Azure VM
         run: |
-          ssh azureuser@4.230.11.18 "cat > /home/azureuser/AutoBot/.env <<'EOT'
+          ssh azureuser@4.230.11.18 "cat > /home/azureuser/autoTrader/.env <<'EOT'
           SLACK_WEBHOOK_URL=${{ secrets.SLACK_WEBHOOK_URL }}
           BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }}
           BINANCE_API_SECRET=${{ secrets.BINANCE_API_SECRET }}
@@ -55,15 +55,15 @@ jobs:
 
           # 환경 변수 파일 권한 및 내용 확인
           ssh azureuser@4.230.11.18 "
-            chmod 600 /home/azureuser/AutoBot/.env &&
+            chmod 600 /home/azureuser/autoTrader/.env &&
             echo '>>> .env 파일 확인:' &&
-            cat /home/azureuser/AutoBot/.env | grep -v SECRET | grep -v KEY
+            cat /home/azureuser/autoTrader/.env | grep -v SECRET | grep -v KEY
           "
 
       - name: 📦 Set up Python and install dependencies
         run: |
           ssh azureuser@4.230.11.18 "
-            cd /home/azureuser/AutoBot &&
+            cd /home/azureuser/autoTrader &&
             python3 -m venv venv &&
             source venv/bin/activate &&
             pip install --upgrade pip &&
@@ -73,7 +73,7 @@ jobs:
       - name: ✅ Verify TA-Lib (via `ta` package)
         run: |
           ssh azureuser@4.230.11.18 "
-            source /home/azureuser/AutoBot/venv/bin/activate &&
+            source /home/azureuser/autoTrader/venv/bin/activate &&
             python -c 'import ta; print(\"✅ Technical Analysis library installed successfully\")'
           "
 
@@ -81,7 +81,7 @@ jobs:
         run: |
           ssh azureuser@4.230.11.18 "
             pkill -f main.py || true &&
-            cd /home/azureuser/AutoBot &&
+            cd /home/azureuser/autoTrader &&
             source venv/bin/activate &&
             nohup venv/bin/python3 main.py > bot.log 2>&1 &
           "
@@ -99,7 +99,7 @@ jobs:
         run: |
           ssh azureuser@4.230.11.18 "
             echo '>>> 최신 봇 로그:' &&
-            tail -n 30 /home/azureuser/AutoBot/bot.log || echo 'no bot.log found'
+            tail -n 30 /home/azureuser/autoTrader/bot.log || echo 'no bot.log found'
           "
 
       - name: 🎉 Done!
