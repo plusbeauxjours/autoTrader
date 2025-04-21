@@ -6,6 +6,10 @@ import requests
 import time
 import os
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 SPIKE_FACTOR = 3.0
 CONFIRM_PERIOD = 3
